@@ -133,11 +133,8 @@ jobs:
           auth_file="$(mktemp)"
 
           if ! curl -sS -X GET "$AGENT_URL/agent/v2/auth" \
-
             -H "Authorization: Basic $BASIC" \
-
             -H "Accept: application/json" \
-
             -o "$auth_file"; then
 
             echo "Failed to contact $AGENT_URL/agent/v2/auth"
@@ -207,11 +204,8 @@ jobs:
           post_resp="$(mktemp)"
 
           if ! curl -sS -X POST "$AGENT_URL/agent/v1/executions" \
-
             -H "Content-Type: application/json" \
-
             -H "Authorization: Bearer $token" \
-
             --data-binary "@$payload_file" -o "$post_resp"; then
 
             echo "Failed to POST execution request to $AGENT_URL/agent/v1/executions"
@@ -271,9 +265,7 @@ jobs:
             echo "Polling execution status (attempt $attempt/$MAX_ATTEMPTS)..."
 
             if ! curl -sS -X GET "$AGENT_URL/agent/v1/executions/$execution_id" \
-
               -H "Accept: application/json" \
-
               -H "Authorization: Bearer $token" -o "$status_file"; then
 
               echo "Failed to GET execution status (attempt $attempt). Response (if any):"
