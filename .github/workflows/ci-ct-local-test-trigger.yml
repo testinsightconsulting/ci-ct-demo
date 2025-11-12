@@ -147,17 +147,7 @@ jobs:
 
 
 
-          token="$(python3 - "$auth_file" <<'PY'
-          import sys, json
-          p = sys.argv[1]
-          try:
-              obj = json.load(open(p))
-          except Exception:
-              sys.exit(0)
-          t = obj.get("token") or obj.get("access_token") or (obj.get("data") or {}).get("token") or ""
-          print(t, end="")
-          PY
-          )"
+          token="$(python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); t=obj.get("token") or obj.get("access_token") or (obj.get("data") or {}).get("token") or ""; print(t, end="")' "$auth_file" 2>/dev/null || echo "")"
 
 
 
@@ -177,19 +167,7 @@ jobs:
 
           payload_file="$(mktemp)"
 
-          python3 - <<'PY' > "$payload_file"
-          import json, os
-          obj = {
-            "testPath": os.environ["TEST_PATH"],
-            "callbackURL": os.environ.get("CALLBACK_URL", ""),
-            "reportFormat": os.environ.get("REPORT_FORMAT", "text"),
-            "detailLevel": os.environ.get("DETAIL_LEVEL", "REPORT_ONLY"),
-            "priority": os.environ.get("PRIORITY", "NORMAL")
-          }
-          if not obj["callbackURL"]:
-              obj.pop("callbackURL", None)
-          print(json.dumps(obj))
-          PY
+          python3 -c 'import json,os; obj={"testPath":os.environ["TEST_PATH"],"callbackURL":os.environ.get("CALLBACK_URL",""),"reportFormat":os.environ.get("REPORT_FORMAT","text"),"detailLevel":os.environ.get("DETAIL_LEVEL","REPORT_ONLY"),"priority":os.environ.get("PRIORITY","NORMAL")}; obj.pop("callbackURL",None) if not obj["callbackURL"] else None; print(json.dumps(obj))' > "$payload_file"
 
 
 
@@ -224,17 +202,7 @@ jobs:
 
 
 
-          execution_id="$(python3 - "$post_resp" <<'PY'
-          import sys, json
-          p = sys.argv[1]
-          try:
-              obj = json.load(open(p))
-          except Exception:
-              sys.exit(0)
-          eid = obj.get("executionID") or obj.get("executionId") or obj.get("id") or ""
-          print(eid, end="")
-          PY
-          )"
+          execution_id="$(python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); eid=obj.get("executionID") or obj.get("executionId") or obj.get("id") or ""; print(eid, end="")' "$post_resp" 2>/dev/null || echo "")"
 
 
 
@@ -276,33 +244,11 @@ jobs:
 
 
 
-            python3 - "$status_file" <<'PY'
-            import sys, json
-            p = sys.argv[1]
-            try:
-                obj = json.load(open(p))
-            except Exception:
-                print("Unable to parse status JSON")
-                sys.exit(0)
-            s = obj.get("executionState") or obj.get("state") or ""
-            pc = obj.get("percentageComplete") or ""
-            print("executionState:", s, "percentageComplete:", pc)
-            PY
+            python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); s=obj.get("executionState") or obj.get("state") or ""; pc=obj.get("percentageComplete") or ""; print("executionState:", s, "percentageComplete:", pc)' "$status_file" 2>/dev/null || echo "Unable to parse status JSON"
 
 
 
-            state="$(python3 - "$status_file" <<'PY'
-            import sys, json
-            p = sys.argv[1]
-            try:
-                obj = json.load(open(p))
-            except Exception:
-                print("", end="")
-                sys.exit(0)
-            s = obj.get("executionState") or obj.get("state") or ""
-            print(s, end="")
-            PY
-            )"
+            state="$(python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); s=obj.get("executionState") or obj.get("state") or ""; print(s, end="")' "$status_file" 2>/dev/null || echo "")"
 
 
 
@@ -342,31 +288,11 @@ jobs:
 
 
 
-          final_state="$(python3 - final_execution.json <<'PY'
-          import sys, json
-          p = sys.argv[1]
-          try:
-              obj = json.load(open(p))
-          except Exception:
-              print("", end="")
-              sys.exit(0)
-          print(obj.get("executionState") or obj.get("state") or "", end="")
-          PY
-          )"
+          final_state="$(python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); print(obj.get("executionState") or obj.get("state") or "", end="")' final_execution.json 2>/dev/null || echo "")"
 
 
 
-          failure_reason="$(python3 - final_execution.json <<'PY'
-          import sys, json
-          p = sys.argv[1]
-          try:
-              obj = json.load(open(p))
-          except Exception:
-              print("", end="")
-              sys.exit(0)
-          print(obj.get("failureReason") or "", end="")
-          PY
-          )"
+          failure_reason="$(python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); print(obj.get("failureReason") or "", end="")' final_execution.json 2>/dev/null || echo "")"
 
 
 
