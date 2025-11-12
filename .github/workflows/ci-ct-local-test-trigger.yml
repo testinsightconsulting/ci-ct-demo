@@ -1,0 +1,252 @@
+# Workflow: CI-CT Local Test Trigger
+# This workflow:
+# 1) GETs a Bearer token from /agent/v2/auth using Basic auth (AGENT_BASIC_AUTH secret)
+# 2) POSTs a test execution request to /agent/v1/executions with a JSON body including testPath
+# 3) Polls /agent/v1/executions/{executionID} until executionState is not IN_PROGRESS
+# 4) Uploads the final execution JSON as a workflow artifact and fails the job if the execution FAILED/ABORTED/etc.
+#
+# SECURITY:
+# - LOCAL_AGENT_URL must be set as a repository secret (your ngrok URL or other agent base URL).
+# - AGENT_BASIC_AUTH must be set as a repository secret (base64 "username:password").
+# - TEST_PATH is set here to project://ai_STC_Demo/test_cases/stc_demo.fftc; move to a secret if you prefer.
+name: CI-CT Local Test Trigger
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  trigger-local-test:
+    runs-on: ubuntu-latest
+    env:
+      AGENT_URL: ${{ secrets.LOCAL_AGENT_URL }}
+      AGENT_BASIC_AUTH: ${{ secrets.AGENT_BASIC_AUTH }}
+      TEST_PATH: project://ai_STC_Demo/test_cases/stc_demo.fftc
+      REPORT_FORMAT: text
+      DETAIL_LEVEL: ALL_ISSUES_ALL_STEPS
+      PRIORITY: NORMAL
+      POLL_INTERVAL_SECONDS: 30
+      POLL_MAX_ATTEMPTS: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger agent: auth -> create execution -> poll for result
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          AGENT_URL="${AGENT_URL}"
+          BASIC="${AGENT_BASIC_AUTH:-}"
+          TEST_PATH="${TEST_PATH:-}"
+          REPORT_FORMAT="${REPORT_FORMAT}"
+          DETAIL_LEVEL="${DETAIL_LEVEL}"
+          PRIORITY="${PRIORITY}"
+          INTERVAL="${POLL_INTERVAL_SECONDS}"
+          MAX_ATTEMPTS="${POLL_MAX_ATTEMPTS}"
+
+          if [ -z "$AGENT_URL" ]; then
+            echo "ERROR: LOCAL_AGENT_URL secret is not set."
+            exit 1
+          fi
+          if [ -z "$BASIC" ]; then
+            echo "ERROR: AGENT_BASIC_AUTH secret is not set."
+            exit 1
+          fi
+          if [ -z "$TEST_PATH" ]; then
+            echo "ERROR: TEST_PATH is not set. Provide a test path via the workflow env or secrets."
+            exit 1
+          fi
+
+          CALLBACK_URL="${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}"
+          export TEST_PATH CALLBACK_URL REPORT_FORMAT DETAIL_LEVEL PRIORITY
+
+          echo "Requesting auth token from $AGENT_URL/agent/v2/auth"
+          auth_file="$(mktemp)"
+          if ! curl -sS -X GET "$AGENT_URL/agent/v2/auth" \
+            -H "Authorization: Basic $BASIC" \
+            -H "Accept: application/json" \
+            -o "$auth_file"; then
+            echo "Failed to contact $AGENT_URL/agent/v2/auth"
+            cat "$auth_file" || true
+            exit 1
+          fi
+
+          token="$(python3 - <<'PY' "$auth_file"
+import sys, json
+p = sys.argv[1]
+try:
+    obj = json.load(open(p))
+except Exception:
+    sys.exit(0)
+t = obj.get("token") or obj.get("access_token") or (obj.get("data") or {}).get("token") or ""
+print(t, end="")
+PY
+"$auth_file")"
+
+          if [ -z "$token" ]; then
+            echo "ERROR: failed to obtain Bearer token from auth response:"
+            cat "$auth_file"
+            exit 1
+          fi
+          echo "Obtained Bearer token (first 8 chars): ${token:0:8}..."
+
+          payload_file="$(mktemp)"
+          python3 - <<'PY' > "$payload_file"
+import json, os
+obj = {
+  "testPath": os.environ["TEST_PATH"],
+  "callbackURL": os.environ.get("CALLBACK_URL", ""),
+  "reportFormat": os.environ.get("REPORT_FORMAT", "text"),
+  "detailLevel": os.environ.get("DETAIL_LEVEL", "REPORT_ONLY"),
+  "priority": os.environ.get("PRIORITY", "NORMAL")
+}
+if not obj["callbackURL"]:
+    obj.pop("callbackURL", None)
+print(json.dumps(obj))
+PY
+
+          echo "Posting execution request to $AGENT_URL/agent/v1/executions"
+          echo "Payload:"
+          cat "$payload_file"
+
+          post_resp="$(mktemp)"
+          if ! curl -sS -X POST "$AGENT_URL/agent/v1/executions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $token" \
+            --data-binary "@$payload_file" -o "$post_resp"; then
+            echo "Failed to POST execution request to $AGENT_URL/agent/v1/executions"
+            cat "$post_resp" || true
+            exit 1
+          fi
+
+          echo "Execution create response:"
+          cat "$post_resp"
+
+          execution_id="$(python3 - <<'PY' "$post_resp"
+import sys, json
+p = sys.argv[1]
+try:
+    obj = json.load(open(p))
+except Exception:
+    sys.exit(0)
+eid = obj.get("executionID") or obj.get("executionId") or obj.get("id") or ""
+print(eid, end="")
+PY
+"$post_resp")"
+
+          if [ -z "$execution_id" ]; then
+            echo "No executionID returned; saving response as final_execution.json and exiting."
+            cp "$post_resp" final_execution.json || true
+            exit 1
+          fi
+
+          echo "Created execution: $execution_id"
+          status_file="$(mktemp)"
+          attempt=0
+
+          while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
+            attempt=$((attempt + 1))
+            echo "Polling execution status (attempt $attempt/$MAX_ATTEMPTS)..."
+            if ! curl -sS -X GET "$AGENT_URL/agent/v1/executions/$execution_id" \
+              -H "Accept: application/json" \
+              -H "Authorization: Bearer $token" -o "$status_file"; then
+              echo "Failed to GET execution status (attempt $attempt). Response (if any):"
+              cat "$status_file" || true
+            fi
+
+            python3 - <<'PY' "$status_file"
+import sys, json
+p = sys.argv[1]
+try:
+    obj = json.load(open(p))
+except Exception:
+    print("Unable to parse status JSON")
+    sys.exit(0)
+s = obj.get("executionState") or obj.get("state") or ""
+pc = obj.get("percentageComplete") or ""
+print("executionState:", s, "percentageComplete:", pc)
+PY
+"$status_file"
+
+            state="$(python3 - <<'PY' "$status_file"
+import sys, json
+p = sys.argv[1]
+try:
+    obj = json.load(open(p))
+except Exception:
+    print("", end="")
+    sys.exit(0)
+s = obj.get("executionState") or obj.get("state") or ""
+print(s, end="")
+PY
+"$status_file")"
+
+            if [ "$state" != "IN_PROGRESS" ] && [ -n "$state" ]; then
+              echo "Execution finished with state: $state"
+              cp "$status_file" final_execution.json || true
+              break
+            fi
+
+            if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+              echo "Timed out waiting for execution to finish after $MAX_ATTEMPTS attempts."
+              cp "$status_file" final_execution.json || true
+              break
+            fi
+
+            sleep "$INTERVAL"
+          done
+
+          echo "Final execution JSON (saved to final_execution.json):"
+          cat final_execution.json || true
+
+          final_state="$(python3 - <<'PY' final_execution.json
+import sys, json
+p = sys.argv[1]
+try:
+    obj = json.load(open(p))
+except Exception:
+    print("", end="")
+    sys.exit(0)
+print(obj.get("executionState") or obj.get("state") or "", end="")
+PY
+"final_execution.json")"
+
+          failure_reason="$(python3 - <<'PY' final_execution.json
+import sys, json
+p = sys.argv[1]
+try:
+    obj = json.load(open(p))
+except Exception:
+    print("", end="")
+    sys.exit(0)
+print(obj.get("failureReason") or "", end="")
+PY
+"final_execution.json")"
+
+          echo "final_state=$final_state"
+          if [ -n "$failure_reason" ]; then
+            echo "failureReason: $failure_reason"
+          fi
+
+          case "$final_state" in
+            PASS)
+              echo "Execution passed."
+              ;;
+            INDETERMINATE|ABORT|NO_PROCESSES_AVAILABLE_ERROR|FAIL)
+              echo "Execution did not pass: $final_state"
+              exit 1
+              ;;
+            *)
+              echo "Unknown final state: '$final_state' - failing the job for safety."
+              exit 1
+              ;;
+          esac
+
+      - name: Upload execution result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: execution-result
+          path: final_execution.json
