@@ -147,7 +147,7 @@ jobs:
 
 
 
-          token="$(python3 - <<'PY' "$auth_file"
+          token="$(python3 - "$auth_file" <<'PY'
           import sys, json
           p = sys.argv[1]
           try:
@@ -157,7 +157,7 @@ jobs:
           t = obj.get("token") or obj.get("access_token") or (obj.get("data") or {}).get("token") or ""
           print(t, end="")
           PY
-          "$auth_file")"
+          )"
 
 
 
@@ -224,7 +224,7 @@ jobs:
 
 
 
-          execution_id="$(python3 - <<'PY' "$post_resp"
+          execution_id="$(python3 - "$post_resp" <<'PY'
           import sys, json
           p = sys.argv[1]
           try:
@@ -234,7 +234,7 @@ jobs:
           eid = obj.get("executionID") or obj.get("executionId") or obj.get("id") or ""
           print(eid, end="")
           PY
-          "$post_resp")"
+          )"
 
 
 
@@ -276,7 +276,7 @@ jobs:
 
 
 
-            python3 - <<'PY' "$status_file"
+            python3 - "$status_file" <<'PY'
             import sys, json
             p = sys.argv[1]
             try:
@@ -288,11 +288,10 @@ jobs:
             pc = obj.get("percentageComplete") or ""
             print("executionState:", s, "percentageComplete:", pc)
             PY
-            "$status_file"
 
 
 
-            state="$(python3 - <<'PY' "$status_file"
+            state="$(python3 - "$status_file" <<'PY'
             import sys, json
             p = sys.argv[1]
             try:
@@ -303,7 +302,7 @@ jobs:
             s = obj.get("executionState") or obj.get("state") or ""
             print(s, end="")
             PY
-            "$status_file")"
+            )"
 
 
 
@@ -343,7 +342,7 @@ jobs:
 
 
 
-          final_state="$(python3 - <<'PY' final_execution.json
+          final_state="$(python3 - final_execution.json <<'PY'
           import sys, json
           p = sys.argv[1]
           try:
@@ -353,11 +352,11 @@ jobs:
               sys.exit(0)
           print(obj.get("executionState") or obj.get("state") or "", end="")
           PY
-          "final_execution.json")"
+          )"
 
 
 
-          failure_reason="$(python3 - <<'PY' final_execution.json
+          failure_reason="$(python3 - final_execution.json <<'PY'
           import sys, json
           p = sys.argv[1]
           try:
@@ -367,7 +366,7 @@ jobs:
               sys.exit(0)
           print(obj.get("failureReason") or "", end="")
           PY
-          "final_execution.json")"
+          )"
 
 
 
