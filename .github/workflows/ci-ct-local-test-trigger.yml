@@ -306,6 +306,66 @@ jobs:
 
 
 
+          echo "Fetching execution ID from $AGENT_URL/agent/v1/executions"
+
+          executions_resp="$(mktemp)"
+
+          if ! curl -sS -X GET "$AGENT_URL/agent/v1/executions" \
+            -H "Accept: application/json" \
+            -H "Authorization: Bearer $token" -o "$executions_resp"; then
+
+            echo "Failed to GET executions list from $AGENT_URL/agent/v1/executions"
+
+            cat "$executions_resp" || true
+
+          else
+
+            echo "Executions list response:"
+
+            cat "$executions_resp"
+
+            exec_id="$(python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); execs=obj if isinstance(obj,list) else obj.get("executions",[]) or obj.get("data",[]); eid=execs[0].get("executionID") or execs[0].get("executionId") or execs[0].get("id") or "" if execs else ""; print(eid, end="")' "$executions_resp" 2>/dev/null || echo "")"
+
+            if [ -z "$exec_id" ]; then
+
+              echo "WARNING: Could not extract execution ID from executions list, using existing execution_id: $execution_id"
+
+              exec_id="$execution_id"
+
+            else
+
+              echo "Extracted execution ID: $exec_id"
+
+            fi
+
+            echo "Fetching execution report from $AGENT_URL/agent/v1/executions/$exec_id/report"
+
+            report_resp="$(mktemp)"
+
+            if ! curl -sS -X GET "$AGENT_URL/agent/v1/executions/$exec_id/report" \
+              -H "Accept: application/json" \
+              -H "Authorization: Bearer $token" -o "$report_resp"; then
+
+              echo "Failed to GET execution report from $AGENT_URL/agent/v1/executions/$exec_id/report"
+
+              cat "$report_resp" || true
+
+            else
+
+              echo "Execution report response:"
+
+              cat "$report_resp"
+
+              cp "$report_resp" execution_report.json || true
+
+              echo "Execution report saved to execution_report.json"
+
+            fi
+
+          fi
+
+
+
           case "$final_state" in
 
             PASS)
