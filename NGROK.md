@@ -178,6 +178,31 @@ Connections                   ttl     opn     rt1     rt5     p50     p90
                               0       0       0.00    0.00    0.00    0.00
 ```
 
+### Step 4: Expose Port 8443 with ngrok (with Powershell)
+
+```
+
+"C:\Users\<username>\ngrok.exe" http 8443
+
+ngrok                                                                                                   (Ctrl+C to quit)
+
+�  One gateway for every AI model. Available in early access *now*: https://ngrok.com/r/ai
+
+Session Status                online
+Account                       inti sanchez (Plan: Free)
+Update                        update available (version 3.34.1, Ctrl-U to update)
+Version                       3.22.1
+Region                        Europe (eu)
+Latency                       97ms
+Web Interface                 http://127.0.0.1:4040
+Forwarding                    https://460b6173b6ae.ngrok-free.app -> http://localhost:8443
+
+Connections                   ttl     opn     rt1     rt5     p50     p90
+                              0       0       0.00    0.00    0.00    0.00
+```
+
+
+
 **Important URLs:**
 - **Forwarding URL**: `https://abc123.ngrok-free.app` - This is your public URL that forwards to `localhost:8443`
 - **Web Interface**: `http://127.0.0.1:4040` - ngrok's web interface to inspect requests
@@ -414,4 +439,5 @@ ngrok http 8443 --basic-auth="username:password"
 ---
 
 **Need Help?** If you encounter issues not covered here, check the [ngrok documentation](https://ngrok.com/docs) or the troubleshooting section above.
+
 
