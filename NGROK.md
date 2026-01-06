@@ -178,27 +178,20 @@ Connections                   ttl     opn     rt1     rt5     p50     p90
                               0       0       0.00    0.00    0.00    0.00
 ```
 
-### Step 4: Expose Port 8443 with ngrok (with Powershell)
+### Step 4: Expose Port 8443 with ngrok (with Powershell) AND FORWARD HTTPS
 
 ```
 
-"C:\Users\<username>\ngrok.exe" http 8443
+"C:\Users\<username>\ngrok.exe" http https://localhost:8443
 
-ngrok                                                                                                   (Ctrl+C to quit)
+# With host header rewrite (if needed)
+ngrok http https://localhost:8443 --host-header=localhost:8443
 
-�  One gateway for every AI model. Available in early access *now*: https://ngrok.com/r/ai
+# Skip TLS verification (if using self-signed cert)
+ngrok http https://localhost:8443 --verify-tls=false
 
-Session Status                online
-Account                       inti sanchez (Plan: Free)
-Update                        update available (version 3.34.1, Ctrl-U to update)
-Version                       3.22.1
-Region                        Europe (eu)
-Latency                       97ms
-Web Interface                 http://127.0.0.1:4040
-Forwarding                    https://460b6173b6ae.ngrok-free.app -> http://localhost:8443
-
-Connections                   ttl     opn     rt1     rt5     p50     p90
-                              0       0       0.00    0.00    0.00    0.00
+# Run in background (Windows)
+ngrok http https://localhost:8443 --log=stdout
 ```
 
 
@@ -439,5 +432,6 @@ ngrok http 8443 --basic-auth="username:password"
 ---
 
 **Need Help?** If you encounter issues not covered here, check the [ngrok documentation](https://ngrok.com/docs) or the troubleshooting section above.
+
 
 
